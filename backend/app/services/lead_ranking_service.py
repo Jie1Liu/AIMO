@@ -51,6 +51,9 @@ class LeadRankingService:
             ai_score = int(ranking["fit_score"])
             # Keep a small recall signal while letting explicit post intent drive the result.
             final_score = round(lead.lead_score * 0.2 + ai_score * 0.8)
+            if ai_score < 60:
+                # Weak or ambiguous AI matches should not enter the human review queue.
+                final_score = min(final_score, 39)
             lead.lead_score = max(0, min(100, final_score))
             lead.confidence = min(0.99, max(0.35, lead.lead_score / 100))
             lead.reason = f"AI fit: {ranking['reason']}"
