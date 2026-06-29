@@ -1,7 +1,24 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="2" width="60" height="60" rx="19" fill="#C8F169"/>
-  <path d="M17 44L28.35 19.7C29.75 16.7 34.02 16.7 35.42 19.7L46.78 44" stroke="#143326" stroke-width="6.2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M23.3 34.2H40.4" stroke="#143326" stroke-width="5.2" stroke-linecap="round"/>
-  <circle cx="48.2" cy="15.8" r="7.2" fill="#143326"/>
-  <path d="M48.2 11.7V19.9M44.1 15.8H52.3" stroke="#F5F8F1" stroke-width="2.4" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="energy" x1="9" y1="56" x2="54" y2="7" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B7E94E"/>
+      <stop offset="1" stop-color="#E3FF8B"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="19" fill="url(#energy)"/>
+
+  <!-- AI: a decisive A built from customer and market signals. -->
+  <path d="M13.5 46L27.6 19.2C29.1 16.4 33.1 16.4 34.6 19.2L47 43.7" stroke="#143326" stroke-width="6.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="24.4" cy="35.4" r="2.5" fill="#143326"/>
+  <circle cx="31.5" cy="35.4" r="2.5" fill="#143326"/>
+  <circle cx="38.6" cy="35.4" r="2.5" fill="#143326"/>
+
+  <!-- CMO: insight turns into an active, upward growth decision. -->
+  <path d="M25.2 47C34.1 42.7 41.8 34.1 49.2 20.1" stroke="#FF623D" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M40.6 20.3L49.8 19.2L50.6 28.2" stroke="#FF623D" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- The moving orbit represents multi-channel signal collection. -->
+  <path d="M10.2 23.2C12 15.4 18.2 9.9 26 8.3" stroke="#143326" stroke-width="2.2" stroke-linecap="round" opacity=".38"/>
+  <circle cx="9.8" cy="26.9" r="2.2" fill="#143326" opacity=".55"/>
+  <circle cx="29.7" cy="7.9" r="2.2" fill="#FF623D"/>
 </svg>

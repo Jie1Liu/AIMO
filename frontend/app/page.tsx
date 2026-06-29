@@ -393,7 +393,7 @@ export default function HomePage() {
           </div>
           <div>
             <strong>AIMO</strong>
-            <span>Find signal. Start conversations.</span>
+            <span>Your AI CMO, in motion.</span>
           </div>
         </div>
 
@@ -405,11 +405,11 @@ export default function HomePage() {
             onClick={() => setPlatformMenuOpen((current) => !current)}
           >
             <span className="add-platform-icon"><Plus size={14} /></span>
-            添加其他平台
+            Add another platform
             <ChevronDown className={platformMenuOpen ? "open" : ""} size={15} />
           </button>
           {platformMenuOpen && (
-            <div className="platform-dropdown" role="menu" aria-label="其他平台">
+            <div className="platform-dropdown" role="menu" aria-label="Other platforms">
               <div className="platform-option" role="menuitem" aria-disabled="true">
                 <span className="platform-option-icon x-icon">X</span>
                 <div>
@@ -424,7 +424,7 @@ export default function HomePage() {
                   <small>Coming soon</small>
                 </div>
               </div>
-              <p>展示入口 · 暂未接入 API</p>
+              <p>Preview only · API integrations coming soon</p>
             </div>
           )}
         </div>
