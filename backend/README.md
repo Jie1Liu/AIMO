@@ -46,7 +46,9 @@ docker compose up --build
 8. `POST /api/outreach-messages/{message_id}/send`
 9. `POST /api/products/{product_id}/generate-insights`
 
-Reddit sends never auto-post in the MVP. The send endpoint returns a manual copy/open-original action and writes an audit log. YouTube and Bluesky connectors simulate approved sends until real platform credentials are configured.
+Bluesky is the live MVP platform. Public discovery uses the Bluesky AppView search API.
+Approved replies are published through AT Protocol only after a human edits and approves
+the message. A dedicated Bluesky App Password must be configured on the backend.
 
 ## Aurora PostgreSQL Configuration
 

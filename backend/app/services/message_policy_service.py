@@ -39,6 +39,7 @@ class MessagePolicyService:
     def _is_duplicate(self, db: Session, message_text: str, current_message_id: Optional[object]) -> bool:
         query = db.query(OutreachMessage).filter(
             (OutreachMessage.final_text == message_text) | (OutreachMessage.draft_text == message_text),
+            OutreachMessage.status.in_(["approved", "sent"]),
         )
         if current_message_id is not None:
             query = query.filter(OutreachMessage.id != current_message_id)

@@ -1,51 +1,24 @@
 "use client";
 
 import {
-  Activity,
+  ArrowRight,
+  Bot,
+  Check,
   CheckCircle2,
-  ClipboardList,
-  Database,
-  History,
-  KeyRound,
-  Lightbulb,
+  ExternalLink,
+  Eye,
+  LoaderCircle,
   MessageSquareText,
-  Play,
-  PlusCircle,
+  Radio,
   RefreshCw,
   Search,
   Send,
-  Server,
-  Trash2,
-  Users,
-  Wand2
+  ShieldCheck,
+  SkipForward,
+  Sparkles,
+  Users
 } from "lucide-react";
-import { useMemo, useState } from "react";
-
-type ApiState = "idle" | "ok" | "error";
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
-
-type ProductRead = {
-  id: string;
-  company_id: string;
-};
-
-type PlatformAccountRead = {
-  id: string;
-  platform: string;
-  account_label: string;
-};
-
-type LeadRead = {
-  id: string;
-  platform: string;
-  lead_score: number;
-};
-
-type OutreachMessageRead = {
-  id: string;
-  platform: string;
-  status: string;
-};
+import { useEffect, useMemo, useState } from "react";
 
 type ProductForm = {
   company_name: string;
@@ -61,59 +34,84 @@ type ProductForm = {
   negative_keywords: string;
 };
 
-type ApiLog = {
+type ProductRead = {
   id: string;
-  label: string;
-  method: HttpMethod;
-  path: string;
-  ok: boolean;
-  status: number | null;
-  durationMs: number;
-  requestBody?: unknown;
-  responseBody?: unknown;
-  error?: string;
-  createdAt: string;
+  company_id: string;
 };
 
-const defaultProduct: ProductForm = {
-  company_name: "AIMO Test Company",
+type SearchJobRead = {
+  status: string;
+  error_message: string | null;
+};
+
+type BlueskyStatus = {
+  configured: boolean;
+  connected: boolean;
+  handle: string | null;
+  account_id: string | null;
+};
+
+type SocialItemRead = {
+  id: string;
+  content_text: string;
+  content_url: string | null;
+  source_title: string | null;
+  engagement_score: number;
+  published_at: string | null;
+  raw_json: Record<string, unknown>;
+};
+
+type LeadRead = {
+  id: string;
+  author_name: string | null;
+  intent_type: string;
+  lead_score: number;
+  confidence: number;
+  pain_point: string | null;
+  user_need: string | null;
+  reason: string | null;
+  social_item: SocialItemRead | null;
+};
+
+type MessageRead = {
+  id: string;
+  lead_id: string;
+  draft_text: string;
+  final_text: string | null;
+  risk_level: string;
+  policy_notes: Record<string, unknown>;
+  status: string;
+};
+
+type SendResponse = {
+  message: MessageRead;
+  action: string;
+  log: { error_message: string | null; platform_response_id: string | null };
+};
+
+type ReviewItem = {
+  lead: LeadRead;
+  message: MessageRead;
+  reply: string;
+  localStatus: "ready" | "skipped" | "sent";
+  sentUrl?: string | null;
+};
+
+const initialProduct: ProductForm = {
+  company_name: "AIMO Studio",
   product_name: "AIMO",
-  one_liner: "AI CMO for early-stage founders",
+  one_liner: "AI marketing copilot for early-stage teams",
   product_description:
-    "AIMO helps companies discover potential customers from public social media discussions.",
-  target_audience: "early-stage SaaS founders, indie hackers, small business owners",
-  growth_goal: "find early users and validate product positioning",
-  main_problem: "Founders do not know where to find their first users.",
+    "AIMO helps founders find relevant public conversations, understand user intent, and prepare thoughtful replies.",
+  target_audience: "SaaS founders, indie hackers, and small product teams",
+  growth_goal: "Find early users and validate product positioning",
+  main_problem: "Founders struggle to find the right early users and join relevant conversations",
   solution:
-    "AIMO searches public discussions, identifies leads, and generates human-reviewed outreach drafts.",
-  competitors: "Apollo, Buffer, Hootsuite",
-  keywords: "find early users, startup marketing, social listening",
-  negative_keywords: "job, internship, course"
+    "Surface high-intent public discussions and create useful, human-reviewed replies grounded in each person's context.",
+  competitors: "Apollo, Hootsuite, Buffer",
+  keywords: "startup marketing, find customers, early users",
+  negative_keywords: "job, hiring, course, giveaway"
 };
-
-const accountTemplates = [
-  {
-    platform: "reddit",
-    account_label: "Founder Reddit",
-    platform_username: "aimo_founder",
-    auth_type: "manual",
-    daily_send_limit: 5
-  },
-  {
-    platform: "youtube",
-    account_label: "AIMO YouTube",
-    platform_username: "@aimo",
-    auth_type: "oauth",
-    daily_send_limit: 10
-  },
-  {
-    platform: "bluesky",
-    account_label: "AIMO Bluesky",
-    platform_username: "aimo.bsky.social",
-    auth_type: "app_password",
-    daily_send_limit: 12
-  }
-];
 
 function splitList(value: string) {
   return value
@@ -122,490 +120,504 @@ function splitList(value: string) {
     .filter(Boolean);
 }
 
-function formatJson(value: unknown) {
-  return JSON.stringify(value, null, 2);
+function excerpt(value: string, max = 180) {
+  return value.length > max ? `${value.slice(0, max).trim()}…` : value;
 }
 
-function makeId() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function formatIntent(value: string) {
+  return value.replaceAll("_", " ");
 }
 
 export default function HomePage() {
-  const [apiUrl, setApiUrl] = useState(
-    process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"
-  );
-  const [apiState, setApiState] = useState<ApiState>("idle");
+  const [apiUrl] = useState(() => {
+    const configured = process.env.NEXT_PUBLIC_API_URL;
+    if (configured) return configured.replace(/\/$/, "");
+    if (
+      typeof window !== "undefined" &&
+      ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ) {
+      return "http://127.0.0.1:8000";
+    }
+    return "https://aimo-backend.zeabur.app";
+  });
+  const [product, setProduct] = useState<ProductForm>(initialProduct);
+  const [platform, setPlatform] = useState<BlueskyStatus | null>(null);
+  const [queue, setQueue] = useState<ReviewItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [lastResult, setLastResult] = useState<unknown>(null);
-  const [lastLabel, setLastLabel] = useState("Response");
-  const [logs, setLogs] = useState<ApiLog[]>([]);
-  const [productForm, setProductForm] = useState<ProductForm>(defaultProduct);
-  const [companyId, setCompanyId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [leadId, setLeadId] = useState("");
-  const [messageId, setMessageId] = useState("");
-  const [accountIds, setAccountIds] = useState<Record<string, string>>({});
-  const [manualMethod, setManualMethod] = useState<HttpMethod>("GET");
-  const [manualPath, setManualPath] = useState("/health");
-  const [manualBody, setManualBody] = useState("{\n\n}");
+  const [stage, setStage] = useState("Ready to discover");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const statusText = useMemo(() => {
-    if (apiState === "ok") return "Connected";
-    if (apiState === "error") return "Request failed";
-    return "Idle";
-  }, [apiState]);
+  const selected = useMemo(
+    () => queue.find((item) => item.message.id === selectedId) ?? null,
+    [queue, selectedId]
+  );
+  const sentCount = queue.filter((item) => item.localStatus === "sent").length;
+  const readyCount = queue.filter((item) => item.localStatus === "ready").length;
 
-  const canUseBody = manualMethod === "POST" || manualMethod === "PATCH";
+  useEffect(() => {
+    void loadPlatformStatus();
+  }, []);
 
-  function updateProductField(field: keyof ProductForm, value: string) {
-    setProductForm((current) => ({ ...current, [field]: value }));
+  async function request<T>(path: string, options?: RequestInit): Promise<T> {
+    const response = await fetch(`${apiUrl}${path}`, {
+      ...options,
+      headers: {
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
+        ...(options?.headers ?? {})
+      }
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!response.ok) {
+      const detail = data && typeof data === "object" ? data.detail : null;
+      throw new Error(typeof detail === "string" ? detail : response.statusText || "Request failed");
+    }
+    return data as T;
   }
 
-  function buildProductPayload() {
+  async function loadPlatformStatus() {
+    try {
+      const status = await request<BlueskyStatus>("/api/integrations/bluesky/status");
+      setPlatform(status);
+    } catch {
+      setPlatform({ configured: false, connected: false, handle: null, account_id: null });
+    }
+  }
+
+  function updateProduct(field: keyof ProductForm, value: string) {
+    setProduct((current) => ({ ...current, [field]: value }));
+  }
+
+  function productPayload() {
     return {
-      company_name: productForm.company_name,
-      product_name: productForm.product_name,
-      one_liner: productForm.one_liner,
-      product_description: productForm.product_description,
-      target_audience: productForm.target_audience,
-      growth_goal: productForm.growth_goal,
-      main_problem: productForm.main_problem,
-      solution: productForm.solution,
-      competitors: splitList(productForm.competitors),
-      keywords: splitList(productForm.keywords),
-      negative_keywords: splitList(productForm.negative_keywords)
+      ...product,
+      competitors: splitList(product.competitors),
+      keywords: splitList(product.keywords),
+      negative_keywords: splitList(product.negative_keywords)
     };
   }
 
-  function requireValue(value: string, label: string) {
-    if (!value.trim()) {
-      throw new Error(`${label} is required`);
-    }
-    return value.trim();
-  }
-
-  async function apiRequest<T>(
-    label: string,
-    method: HttpMethod,
-    path: string,
-    body?: unknown
-  ): Promise<T> {
-    const started = performance.now();
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    const url = `${apiUrl.replace(/\/$/, "")}${normalizedPath}`;
-    let status: number | null = null;
-    let responseBody: unknown;
-    let errorText: string | undefined;
-
+  async function findUsers() {
+    setBusy("discover");
+    setError(null);
+    setNotice(null);
+    setQueue([]);
+    setSelectedId(null);
     try {
-      const response = await fetch(url, {
-        method,
-        headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body)
+      setStage("Saving product brief");
+      const created = await request<ProductRead>("/api/products", {
+        method: "POST",
+        body: JSON.stringify(productPayload())
       });
-      status = response.status;
-      const text = await response.text();
-      responseBody = text ? JSON.parse(text) : null;
-      if (!response.ok) {
-        errorText =
-          typeof responseBody === "object" && responseBody && "detail" in responseBody
-            ? String((responseBody as { detail: unknown }).detail)
-            : response.statusText;
-        throw new Error(errorText);
-      }
-      setApiState("ok");
-      return responseBody as T;
-    } catch (error) {
-      errorText = error instanceof Error ? error.message : "Request failed";
-      setApiState("error");
-      throw error;
-    } finally {
-      const entry: ApiLog = {
-        id: makeId(),
-        label,
-        method,
-        path: normalizedPath,
-        ok: !errorText,
-        status,
-        durationMs: Math.round(performance.now() - started),
-        requestBody: body,
-        responseBody,
-        error: errorText,
-        createdAt: new Date().toLocaleTimeString()
-      };
-      setLogs((current) => [entry, ...current].slice(0, 30));
-      setLastLabel(label);
-      setLastResult(errorText ? { error: errorText, response: responseBody } : responseBody);
-    }
-  }
 
-  async function run(label: string, action: () => Promise<unknown>) {
-    setBusy(label);
-    try {
-      await action();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Request failed";
-      setLastLabel(label);
-      setLastResult({ error: message });
+      if (platform?.configured) {
+        setStage("Connecting your Bluesky account");
+        try {
+          await request("/api/integrations/bluesky/connect", {
+            method: "POST",
+            body: JSON.stringify({ company_id: created.company_id })
+          });
+          await loadPlatformStatus();
+        } catch {
+          // Public discovery still works without write credentials.
+        }
+      }
+
+      setStage("Building search strategy");
+      await request(`/api/products/${created.id}/generate-search-strategies`, { method: "POST" });
+
+      setStage("Searching live Bluesky conversations");
+      const jobs = await request<SearchJobRead[]>(`/api/products/${created.id}/run-search`, {
+        method: "POST",
+        body: JSON.stringify({ platforms: ["bluesky"], process_now: true })
+      });
+      const failedJob = jobs.find((job) => job.status === "failed");
+      if (failedJob) {
+        throw new Error(failedJob.error_message || "Bluesky search failed.");
+      }
+
+      setStage("Ranking the strongest user signals");
+      const leads = await request<LeadRead[]>(
+        `/api/products/${created.id}/leads?platform=bluesky&min_score=40`
+      );
+      const candidateLeads = leads
+        .filter((lead) => lead.social_item?.content_text)
+        .filter(
+          (lead, index, values) =>
+            values.findIndex((candidate) => candidate.author_name === lead.author_name) === index
+        )
+        .slice(0, 8);
+      if (!candidateLeads.length) {
+        throw new Error("No strong Bluesky matches were found. Try broader keywords.");
+      }
+
+      setStage(`Writing personalized replies`);
+      const messages = await Promise.all(
+        candidateLeads.map((lead) =>
+          request<MessageRead>(`/api/leads/${lead.id}/outreach-message`, {
+            method: "POST",
+            body: JSON.stringify({ message_type: "reply", tone: "helpful" })
+          })
+        )
+      );
+      const nextQueue = candidateLeads
+        .map((lead, index) => ({
+          lead,
+          message: messages[index],
+          reply: messages[index].draft_text,
+          localStatus: "ready" as const
+        }))
+        .filter((item) => !["high", "blocked"].includes(item.message.risk_level))
+        .slice(0, 5);
+      if (!nextQueue.length) {
+        throw new Error("Matches were found, but none passed the outreach safety checks.");
+      }
+      setQueue(nextQueue);
+      setSelectedId(nextQueue[0].message.id);
+      setStage(`${nextQueue.length} replies ready for review`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Discovery failed");
+      setStage("Discovery needs attention");
     } finally {
       setBusy(null);
     }
   }
 
-  async function createProduct() {
-    const product = await apiRequest<ProductRead>("Create Product", "POST", "/api/products", buildProductPayload());
-    setCompanyId(product.company_id);
-    setProductId(product.id);
-    return product;
+  function updateReply(value: string) {
+    if (!selected) return;
+    setQueue((current) =>
+      current.map((item) => (item.message.id === selected.message.id ? { ...item, reply: value } : item))
+    );
   }
 
-  async function createDemoAccounts(targetCompanyId = requireValue(companyId, "Company ID")) {
-    const accounts: PlatformAccountRead[] = [];
-    const nextAccountIds: Record<string, string> = {};
-    for (const template of accountTemplates) {
-      const account = await apiRequest<PlatformAccountRead>(
-        `Create ${template.platform} Account`,
-        "POST",
-        "/api/platform-accounts",
-        { ...template, company_id: targetCompanyId }
+  function selectNext(afterId: string) {
+    const currentIndex = queue.findIndex((item) => item.message.id === afterId);
+    const next =
+      queue.slice(currentIndex + 1).find((item) => item.localStatus === "ready") ??
+      queue.find((item) => item.localStatus === "ready" && item.message.id !== afterId);
+    setSelectedId(next?.message.id ?? afterId);
+  }
+
+  function skipSelected() {
+    if (!selected) return;
+    setQueue((current) =>
+      current.map((item) =>
+        item.message.id === selected.message.id ? { ...item, localStatus: "skipped" } : item
+      )
+    );
+    setNotice(`Skipped @${selected.lead.author_name ?? "user"}.`);
+    selectNext(selected.message.id);
+  }
+
+  async function regenerateSelected() {
+    if (!selected) return;
+    setBusy("regenerate");
+    setError(null);
+    try {
+      const message = await request<MessageRead>(
+        `/api/outreach-messages/${selected.message.id}/regenerate`,
+        { method: "POST" }
       );
-      accounts.push(account);
-      nextAccountIds[account.platform] = account.id;
+      setQueue((current) =>
+        current.map((item) =>
+          item.message.id === message.id
+            ? { ...item, message, reply: message.draft_text, localStatus: "ready" }
+            : item
+        )
+      );
+      setNotice("A fresh reply is ready.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not regenerate reply");
+    } finally {
+      setBusy(null);
     }
-    setAccountIds((current) => ({ ...current, ...nextAccountIds }));
-    setLastLabel("Create Demo Accounts");
-    setLastResult(accounts);
-    return accounts;
   }
 
-  async function generateStrategies(targetProductId = requireValue(productId, "Product ID")) {
-    return apiRequest("Generate Strategies", "POST", `/api/products/${targetProductId}/generate-search-strategies`);
-  }
-
-  async function runSearch(targetProductId = requireValue(productId, "Product ID")) {
-    return apiRequest("Run Search", "POST", `/api/products/${targetProductId}/run-search`, {
-      process_now: true
-    });
-  }
-
-  async function loadLeads(targetProductId = requireValue(productId, "Product ID")) {
-    const leads = await apiRequest<LeadRead[]>(
-      "Load Leads",
-      "GET",
-      `/api/products/${targetProductId}/leads?min_score=40`
-    );
-    setLeadId(leads[0]?.id ?? "");
-    return leads;
-  }
-
-  async function createOutreach(targetLeadId = requireValue(leadId, "Lead ID")) {
-    const message = await apiRequest<OutreachMessageRead>(
-      "Create Outreach",
-      "POST",
-      `/api/leads/${targetLeadId}/outreach-message`,
-      { message_type: "reply", tone: "helpful" }
-    );
-    setMessageId(message.id);
-    return message;
-  }
-
-  async function approveOutreach(targetMessageId = requireValue(messageId, "Message ID")) {
-    return apiRequest("Approve Outreach", "POST", `/api/outreach-messages/${targetMessageId}/approve`);
-  }
-
-  async function sendOutreach(targetMessageId = requireValue(messageId, "Message ID")) {
-    return apiRequest("Send Outreach", "POST", `/api/outreach-messages/${targetMessageId}/send`);
-  }
-
-  async function generateInsights(targetProductId = requireValue(productId, "Product ID")) {
-    return apiRequest("Generate Insights", "POST", `/api/products/${targetProductId}/generate-insights`);
-  }
-
-  async function runHappyPath() {
-    const product = await createProduct();
-    await createDemoAccounts(product.company_id);
-    await generateStrategies(product.id);
-    await runSearch(product.id);
-    const leads = await loadLeads(product.id);
-    if (!leads[0]) throw new Error("No leads returned");
-    const message = await createOutreach(leads[0].id);
-    await approveOutreach(message.id);
-    const sendResult = await sendOutreach(message.id);
-    const advisorResult = await generateInsights(product.id);
-    setLastLabel("Full Flow Complete");
-    setLastResult({ product, first_lead: leads[0], message, send_result: sendResult, advisor_result: advisorResult });
-  }
-
-  async function sendManualRequest() {
-    let body: unknown = undefined;
-    if (canUseBody && manualBody.trim()) {
-      body = JSON.parse(manualBody);
+  async function approveAndSend() {
+    if (!selected) return;
+    if (!platform?.connected) {
+      setError("Add BLUESKY_HANDLE and BLUESKY_APP_PASSWORD to the backend before sending.");
+      return;
     }
-    return apiRequest("Manual Request", manualMethod, manualPath, body);
-  }
-
-  function clearLocalState() {
-    setCompanyId("");
-    setProductId("");
-    setLeadId("");
-    setMessageId("");
-    setAccountIds({});
-    setLogs([]);
-    setLastLabel("Response");
-    setLastResult(null);
-    setApiState("idle");
+    setBusy("send");
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await request<MessageRead>(
+        `/api/outreach-messages/${selected.message.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ final_text: selected.reply })
+        }
+      );
+      await request(`/api/outreach-messages/${updated.id}/approve`, { method: "POST" });
+      const result = await request<SendResponse>(`/api/outreach-messages/${updated.id}/send`, {
+        method: "POST"
+      });
+      if (result.message.status !== "sent") {
+        throw new Error(result.log.error_message || "Bluesky did not accept the reply.");
+      }
+      setQueue((current) =>
+        current.map((item) =>
+          item.message.id === selected.message.id
+            ? {
+                ...item,
+                message: result.message,
+                localStatus: "sent",
+                sentUrl: result.log.platform_response_id
+              }
+            : item
+        )
+      );
+      setNotice(`Reply sent from @${platform.handle}.`);
+      selectNext(selected.message.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not send reply");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
-    <main className="page">
-      <div className="shell">
-        <header className="topbar">
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark"><Sparkles size={20} /></div>
           <div>
-            <h1>AIMO Backend Testbench</h1>
-            <div className="subline">
-              <span>FastAPI</span>
-              <span>Aurora PostgreSQL flow</span>
-              <span>Human-reviewed outreach</span>
-            </div>
+            <strong>AIMO</strong>
+            <span>Audience intelligence</span>
           </div>
-          <div className={`status ${apiState}`}>
-            <Activity size={16} />
-            {statusText}
+        </div>
+
+        <div className="platform-card">
+          <div className="platform-icon"><Radio size={18} /></div>
+          <div>
+            <span>LIVE SOURCE</span>
+            <strong>Bluesky</strong>
+          </div>
+          <div className={`connection-dot ${platform?.connected ? "online" : ""}`} />
+        </div>
+
+        <section className="brief">
+          <div className="section-heading">
+            <span>Product brief</span>
+            <small>01</small>
+          </div>
+          <label>
+            Product
+            <input value={product.product_name} onChange={(e) => updateProduct("product_name", e.target.value)} />
+          </label>
+          <label>
+            One-line pitch
+            <input value={product.one_liner} onChange={(e) => updateProduct("one_liner", e.target.value)} />
+          </label>
+          <label>
+            Who is it for?
+            <textarea value={product.target_audience} onChange={(e) => updateProduct("target_audience", e.target.value)} />
+          </label>
+          <label>
+            Problem you solve
+            <textarea value={product.main_problem} onChange={(e) => updateProduct("main_problem", e.target.value)} />
+          </label>
+          <label>
+            Your solution
+            <textarea value={product.solution} onChange={(e) => updateProduct("solution", e.target.value)} />
+          </label>
+          <label>
+            Search signals
+            <input value={product.keywords} onChange={(e) => updateProduct("keywords", e.target.value)} />
+            <small>Separate keywords with commas</small>
+          </label>
+          <button className="discover-button" disabled={Boolean(busy)} onClick={findUsers}>
+            {busy === "discover" ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />}
+            Find users
+            {!busy && <ArrowRight size={17} />}
+          </button>
+        </section>
+
+        <div className="safety-note">
+          <ShieldCheck size={17} />
+          <p><strong>Human-controlled.</strong> AIMO never sends without your review.</p>
+        </div>
+      </aside>
+
+      <section className="workspace">
+        <header className="workspace-header">
+          <div>
+            <p className="eyebrow">Bluesky outreach workspace</p>
+            <h1>Review the conversations that matter.</h1>
+          </div>
+          <div className="header-status">
+            <span className={platform?.connected ? "status-live" : "status-search"}>
+              {platform?.connected ? <CheckCircle2 size={15} /> : <Eye size={15} />}
+              {platform?.connected ? `@${platform.handle}` : "Search-only mode"}
+            </span>
+            <span className="model-pill"><Bot size={15} /> AI + safe fallback</span>
           </div>
         </header>
 
-        <section className="column left-column">
-          <div className="panel">
-            <div className="panel-title">
-              <Server size={17} />
-              Connection
-            </div>
-            <div className="grid two">
-              <label className="field wide">
-                <span>API URL</span>
-                <input value={apiUrl} onChange={(event) => setApiUrl(event.target.value)} />
-              </label>
-              <button className="icon-button" title="Check backend health" disabled={Boolean(busy)} onClick={() => run("Health", () => apiRequest("Health", "GET", "/health"))}>
-                <RefreshCw size={18} />
-              </button>
-            </div>
-          </div>
+        <div className="progress-strip">
+          <div className={queue.length ? "done" : busy ? "active" : ""}><Check size={14} /> Brief</div>
+          <span />
+          <div className={busy === "discover" ? "active" : queue.length ? "done" : ""}><Search size={14} /> Discover</div>
+          <span />
+          <div className={queue.length ? "active" : ""}><MessageSquareText size={14} /> Review</div>
+          <p>{stage}</p>
+        </div>
 
-          <div className="panel">
-            <div className="panel-title">
-              <Database size={17} />
-              Product Profile
-            </div>
-            <div className="grid two">
-              <label className="field">
-                <span>Company</span>
-                <input value={productForm.company_name} onChange={(event) => updateProductField("company_name", event.target.value)} />
-              </label>
-              <label className="field">
-                <span>Product</span>
-                <input value={productForm.product_name} onChange={(event) => updateProductField("product_name", event.target.value)} />
-              </label>
-              <label className="field wide">
-                <span>One-liner</span>
-                <input value={productForm.one_liner} onChange={(event) => updateProductField("one_liner", event.target.value)} />
-              </label>
-              <label className="field wide">
-                <span>Description</span>
-                <textarea value={productForm.product_description} onChange={(event) => updateProductField("product_description", event.target.value)} />
-              </label>
-              <label className="field wide">
-                <span>Target audience</span>
-                <input value={productForm.target_audience} onChange={(event) => updateProductField("target_audience", event.target.value)} />
-              </label>
-              <label className="field wide">
-                <span>Growth goal</span>
-                <input value={productForm.growth_goal} onChange={(event) => updateProductField("growth_goal", event.target.value)} />
-              </label>
-              <label className="field wide">
-                <span>Main problem</span>
-                <input value={productForm.main_problem} onChange={(event) => updateProductField("main_problem", event.target.value)} />
-              </label>
-              <label className="field wide">
-                <span>Solution</span>
-                <textarea value={productForm.solution} onChange={(event) => updateProductField("solution", event.target.value)} />
-              </label>
-              <label className="field">
-                <span>Competitors</span>
-                <input value={productForm.competitors} onChange={(event) => updateProductField("competitors", event.target.value)} />
-              </label>
-              <label className="field">
-                <span>Keywords</span>
-                <input value={productForm.keywords} onChange={(event) => updateProductField("keywords", event.target.value)} />
-              </label>
-              <label className="field wide">
-                <span>Negative keywords</span>
-                <input value={productForm.negative_keywords} onChange={(event) => updateProductField("negative_keywords", event.target.value)} />
-              </label>
-            </div>
+        {error && <div className="alert error-alert">{error}</div>}
+        {notice && <div className="alert success-alert">{notice}</div>}
+        {!platform?.configured && (
+          <div className="credential-banner">
+            <div><ShieldCheck size={19} /></div>
+            <p>
+              <strong>Live search is ready.</strong> To enable sending, create a Bluesky App Password
+              and add <code>BLUESKY_HANDLE</code> and <code>BLUESKY_APP_PASSWORD</code> to the backend.
+            </p>
           </div>
+        )}
 
-          <div className="panel">
-            <div className="panel-title">
-              <KeyRound size={17} />
-              Working IDs
+        {queue.length === 0 ? (
+          <section className="empty-state">
+            <div className="signal-orbit">
+              <div><Users size={28} /></div>
+              <i /><i /><i />
             </div>
-            <div className="grid two">
-              <label className="field">
-                <span>Company ID</span>
-                <input value={companyId} onChange={(event) => setCompanyId(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>Product ID</span>
-                <input value={productId} onChange={(event) => setProductId(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>Lead ID</span>
-                <input value={leadId} onChange={(event) => setLeadId(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>Message ID</span>
-                <input value={messageId} onChange={(event) => setMessageId(event.target.value)} />
-              </label>
+            <p className="eyebrow">Your next users are already talking</p>
+            <h2>Turn product context into real conversations.</h2>
+            <p>
+              Define your product, then AIMO searches live Bluesky posts, ranks intent,
+              and prepares the five strongest replies for you.
+            </p>
+            <div className="empty-features">
+              <span><Radio size={16} /> Live public signals</span>
+              <span><Sparkles size={16} /> Context-aware drafts</span>
+              <span><ShieldCheck size={16} /> You approve every send</span>
             </div>
-            <div className="chips">
-              {["reddit", "youtube", "bluesky"].map((platform) => (
-                <span key={platform} className="chip" title={accountIds[platform] || "No account ID"}>
-                  {platform}: {accountIds[platform] ? "ready" : "empty"}
-                </span>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="column right-column">
-          <div className="panel workflow">
-            <div className="panel-title">
-              <Wand2 size={17} />
-              Workflow
-            </div>
-            <div className="button-grid">
-              <button className="primary span" disabled={Boolean(busy)} onClick={() => run("Full Flow", runHappyPath)}>
-                <Play size={18} />
-                Run Full Flow
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Create Product", createProduct)}>
-                <PlusCircle size={17} />
-                Product
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Create Demo Accounts", () => createDemoAccounts())}>
-                <Users size={17} />
-                Accounts
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Generate Strategies", () => generateStrategies())}>
-                <ClipboardList size={17} />
-                Strategies
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Run Search", () => runSearch())}>
-                <Search size={17} />
-                Search
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Load Leads", () => loadLeads())}>
-                <Users size={17} />
-                Leads
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Create Outreach", () => createOutreach())}>
-                <MessageSquareText size={17} />
-                Outreach
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Approve Outreach", () => approveOutreach())}>
-                <CheckCircle2 size={17} />
-                Approve
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Send Outreach", () => sendOutreach())}>
-                <Send size={17} />
-                Send
-              </button>
-              <button disabled={Boolean(busy)} onClick={() => run("Generate Insights", () => generateInsights())}>
-                <Lightbulb size={17} />
-                Insights
-              </button>
-              <button className="quiet" disabled={Boolean(busy)} onClick={clearLocalState}>
-                <Trash2 size={17} />
-                Clear UI
-              </button>
-            </div>
-          </div>
-
-          <div className="panel playground">
-            <div className="panel-title">
-              <Send size={17} />
-              Manual Request
-            </div>
-            <div className="manual-row">
-              <select value={manualMethod} onChange={(event) => setManualMethod(event.target.value as HttpMethod)}>
-                <option>GET</option>
-                <option>POST</option>
-                <option>PATCH</option>
-                <option>DELETE</option>
-              </select>
-              <input value={manualPath} onChange={(event) => setManualPath(event.target.value)} />
-              <button className="primary" disabled={Boolean(busy)} onClick={() => run("Manual Request", sendManualRequest)}>
-                <Send size={17} />
-                Send
-              </button>
-            </div>
-            <textarea
-              className="body-editor"
-              disabled={!canUseBody}
-              value={manualBody}
-              onChange={(event) => setManualBody(event.target.value)}
-            />
-          </div>
-
-          <div className="split">
-            <div className="panel response-panel">
-              <div className="result-bar">
+          </section>
+        ) : (
+          <div className="review-layout">
+            <section className="queue-panel">
+              <div className="panel-header">
                 <div>
-                  <div className="panel-title compact">{lastLabel}</div>
-                  <div className="small">{busy ? `Running ${busy}` : "Ready"}</div>
+                  <p className="eyebrow">Review queue</p>
+                  <h2>{readyCount} conversations waiting</h2>
                 </div>
+                <span>{sentCount}/{queue.length} sent</span>
               </div>
-              {lastResult ? (
-                <pre className="json">{formatJson(lastResult)}</pre>
-              ) : (
-                <div className="empty">No response yet.</div>
-              )}
-            </div>
+              <div className="queue-list">
+                {queue.map((item, index) => (
+                  <button
+                    key={item.message.id}
+                    className={`queue-item ${selectedId === item.message.id ? "selected" : ""} ${item.localStatus}`}
+                    onClick={() => setSelectedId(item.message.id)}
+                  >
+                    <div className="avatar">{(item.lead.author_name ?? "?").slice(0, 1).toUpperCase()}</div>
+                    <div className="queue-copy">
+                      <div>
+                        <strong>@{item.lead.author_name ?? "unknown"}</strong>
+                        <span>{item.lead.lead_score}% match</span>
+                      </div>
+                      <p>{excerpt(item.lead.social_item?.content_text ?? "")}</p>
+                      <small>{formatIntent(item.lead.intent_type)} · #{index + 1}</small>
+                    </div>
+                    {item.localStatus === "sent" && <CheckCircle2 className="sent-icon" size={18} />}
+                    {item.localStatus === "skipped" && <SkipForward className="sent-icon" size={18} />}
+                  </button>
+                ))}
+              </div>
+            </section>
 
-            <div className="panel history-panel">
-              <div className="panel-title">
-                <History size={17} />
-                Request History
-              </div>
-              <div className="history-list">
-                {logs.length === 0 ? (
-                  <div className="empty small-empty">No requests yet.</div>
-                ) : (
-                  logs.map((log) => (
+            {selected && (
+              <section className="review-panel">
+                <div className="review-topline">
+                  <div>
+                    <p className="eyebrow">Original conversation</p>
+                    <strong>@{selected.lead.author_name ?? "unknown"}</strong>
+                  </div>
+                  <div className="score-ring">{selected.lead.lead_score}<small>%</small></div>
+                </div>
+
+                <div className="original-post">
+                  <p>{selected.lead.social_item?.content_text}</p>
+                  <div>
+                    <span>{selected.lead.social_item?.engagement_score ?? 0} engagement</span>
+                    {selected.lead.social_item?.content_url && (
+                      <a href={selected.lead.social_item.content_url} target="_blank" rel="noreferrer">
+                        Open on Bluesky <ExternalLink size={14} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="match-reason">
+                  <Sparkles size={17} />
+                  <div>
+                    <strong>Why this person fits</strong>
+                    <p>{selected.lead.reason || selected.lead.user_need}</p>
+                  </div>
+                </div>
+
+                <div className="draft-heading">
+                  <div>
+                    <p className="eyebrow">AI-prepared reply</p>
+                    <span className={`risk ${selected.message.risk_level}`}>
+                      {selected.message.risk_level} risk
+                    </span>
+                  </div>
+                  <button disabled={Boolean(busy)} onClick={regenerateSelected}>
+                    {busy === "regenerate" ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
+                    Regenerate
+                  </button>
+                </div>
+                <textarea
+                  className="reply-editor"
+                  value={selected.reply}
+                  maxLength={300}
+                  disabled={selected.localStatus === "sent"}
+                  onChange={(e) => updateReply(e.target.value)}
+                />
+                <div className="editor-meta">
+                  <span>{selected.reply.length} characters</span>
+                  <span>
+                    Generated by {String(selected.message.policy_notes.generator ?? "template")}
+                  </span>
+                </div>
+
+                <div className="review-actions">
+                  <button className="skip-button" disabled={Boolean(busy)} onClick={skipSelected}>
+                    <SkipForward size={17} /> Skip
+                  </button>
+                  {selected.localStatus === "sent" ? (
+                    <a className="sent-button" href={selected.sentUrl ?? "#"} target="_blank" rel="noreferrer">
+                      <CheckCircle2 size={17} /> Sent successfully
+                    </a>
+                  ) : (
                     <button
-                      key={log.id}
-                      className={`history-row ${log.ok ? "success" : "failed"}`}
-                      onClick={() => {
-                        setLastLabel(log.label);
-                        setLastResult(log.ok ? log.responseBody : { error: log.error, response: log.responseBody });
-                      }}
+                      className="send-button"
+                      disabled={
+                        Boolean(busy) ||
+                        !platform?.connected ||
+                        !selected.reply.trim() ||
+                        ["high", "blocked"].includes(selected.message.risk_level)
+                      }
+                      onClick={approveAndSend}
                     >
-                      <span className="method">{log.method}</span>
-                      <span className="history-main">
-                        <strong>{log.label}</strong>
-                        <small>{log.path}</small>
-                      </span>
-                      <span className="history-meta">
-                        {log.status ?? "-"} · {log.durationMs}ms
-                      </span>
+                      {busy === "send" ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}
+                      Approve & send
                     </button>
-                  ))
+                  )}
+                </div>
+                {!platform?.connected && (
+                  <p className="send-hint">Connect your Bluesky App Password to enable sending.</p>
                 )}
-              </div>
-            </div>
+              </section>
+            )}
           </div>
-        </section>
-      </div>
+        )}
+      </section>
     </main>
   );
 }

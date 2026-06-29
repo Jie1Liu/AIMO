@@ -9,11 +9,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = Field(default="development", alias="APP_ENV")
     database_url: str = Field(
-        default="postgresql+psycopg://aimo:aimo@localhost:5432/aimo",
+        default="sqlite:////tmp/aimo.db",
         alias="DATABASE_URL",
     )
     cors_origins_raw: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000",
+        default=(
+            "http://localhost:3000,http://127.0.0.1:3000,"
+            "https://aimo-gold.vercel.app"
+        ),
         alias="CORS_ORIGINS",
     )
 
@@ -26,15 +29,33 @@ class Settings(BaseSettings):
 
     bedrock_model_id: Optional[str] = Field(default=None, alias="BEDROCK_MODEL_ID")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    llm_api_key: Optional[str] = Field(default=None, alias="LLM_API_KEY")
+    llm_base_url: str = Field(default="https://api.openai.com/v1", alias="LLM_BASE_URL")
+    llm_model: str = Field(default="gpt-5.5", alias="LLM_MODEL")
+    llm_api_style: str = Field(default="chat_completions", alias="LLM_API_STYLE")
     reddit_client_id: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_ID")
     reddit_client_secret: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_SECRET")
     youtube_client_id: Optional[str] = Field(default=None, alias="YOUTUBE_CLIENT_ID")
     youtube_client_secret: Optional[str] = Field(default=None, alias="YOUTUBE_CLIENT_SECRET")
     bluesky_service_url: str = Field(default="https://bsky.social", alias="BLUESKY_SERVICE_URL")
+    bluesky_public_api_url: str = Field(
+        default="https://api.bsky.app",
+        alias="BLUESKY_PUBLIC_API_URL",
+    )
+    bluesky_handle: Optional[str] = Field(default=None, alias="BLUESKY_HANDLE")
+    bluesky_app_password: Optional[str] = Field(default=None, alias="BLUESKY_APP_PASSWORD")
     jwt_secret: str = Field(default="change-me-in-production", alias="JWT_SECRET")
 
-    mock_search_limit: int = 3
+    mock_search_limit: int = 8
     lead_min_score: int = 40
+
+    @property
+    def effective_llm_api_key(self) -> Optional[str]:
+        return self.llm_api_key or self.openai_api_key
+
+    @property
+    def bluesky_is_configured(self) -> bool:
+        return bool(self.bluesky_handle and self.bluesky_app_password)
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
@@ -59,6 +80,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"
+
+    @property
+    def uses_sqlite(self) -> bool:
+        return self.database_url.startswith("sqlite:")
 
 
 @lru_cache

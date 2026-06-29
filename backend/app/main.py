@@ -7,6 +7,7 @@ from app.api.routes import (
     companies,
     health,
     insights,
+    integrations,
     leads,
     outreach,
     platform_accounts,
@@ -14,6 +15,7 @@ from app.api.routes import (
     search_jobs,
 )
 from app.core.config import settings
+from app.core.database import initialize_database
 from app.core.exceptions import install_exception_handlers
 
 
@@ -34,7 +36,12 @@ def create_app() -> FastAPI:
 
     install_exception_handlers(app)
 
+    @app.on_event("startup")
+    def initialize_demo_database() -> None:
+        initialize_database()
+
     app.include_router(health.router)
+    app.include_router(integrations.router)
     app.include_router(companies.router, prefix="/api/companies", tags=["Companies"])
     app.include_router(products.router, prefix="/api/products", tags=["Products"])
     app.include_router(platform_accounts.router, tags=["Platform Accounts"])

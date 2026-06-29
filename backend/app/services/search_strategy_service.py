@@ -7,42 +7,37 @@ from app.models.search_strategy import SearchStrategy
 
 
 class SearchStrategyService:
-    platforms = ["reddit", "youtube", "bluesky"]
+    platforms = ["bluesky"]
 
     def generate_for_product(self, db: Session, product: Product, replace_existing: bool = True) -> list[SearchStrategy]:
         if replace_existing:
             db.query(SearchStrategy).filter(SearchStrategy.product_id == product.id).delete()
 
         keywords = product.keywords or []
-        competitors = product.competitors or []
-        base_problem = product.main_problem or product.product_description
-        audience = product.target_audience or "target customers"
+        primary_keyword = keywords[0] if keywords else product.product_name
+        secondary_keyword = keywords[1] if len(keywords) > 1 else primary_keyword
+        tertiary_keyword = keywords[2] if len(keywords) > 2 else secondary_keyword
 
         raw_strategies = [
             (
                 "pain_point",
-                f'"{base_problem}" help OR advice',
+                primary_keyword,
                 95,
             ),
             (
                 "buying_intent",
-                f'"looking for" "{keywords[0] if keywords else product.product_name}"',
+                secondary_keyword,
                 88,
             ),
             (
-                "competitor_complaint",
-                f'"{competitors[0] if competitors else product.product_name}" alternative complaint',
+                "pain_point",
+                tertiary_keyword,
                 82,
             ),
             (
-                "content_research",
-                f'"{audience}" growth marketing questions',
+                "buying_intent",
+                f"looking for {primary_keyword}",
                 70,
-            ),
-            (
-                "market_trend",
-                f'"{product.product_name}" positioning trend',
-                60,
             ),
         ]
 

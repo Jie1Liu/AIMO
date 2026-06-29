@@ -63,6 +63,17 @@ def approve_outreach_message(message_id: UUID, db: Session = Depends(get_db)) ->
     return message
 
 
+@router.post("/api/outreach-messages/{message_id}/regenerate", response_model=OutreachMessageRead)
+def regenerate_outreach_message(message_id: UUID, db: Session = Depends(get_db)) -> OutreachMessage:
+    message = db.get(OutreachMessage, message_id)
+    if not message:
+        raise NotFoundError("Outreach message not found.")
+    OutreachService().regenerate(db, message)
+    db.commit()
+    db.refresh(message)
+    return message
+
+
 @router.post("/api/outreach-messages/{message_id}/reject", response_model=OutreachMessageRead)
 def reject_outreach_message(message_id: UUID, db: Session = Depends(get_db)) -> OutreachMessage:
     message = db.get(OutreachMessage, message_id)

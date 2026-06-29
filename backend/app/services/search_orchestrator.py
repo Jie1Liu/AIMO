@@ -32,7 +32,7 @@ class SearchOrchestrator:
         process_now: bool = True,
     ) -> list[SearchJob]:
         strategies = self._load_strategies(db, product, strategy_ids)
-        platform_filter = set(platforms or ["reddit", "youtube", "bluesky"])
+        platform_filter = set(platforms or ["bluesky"])
         jobs: list[SearchJob] = []
 
         for strategy in strategies:
