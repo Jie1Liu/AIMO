@@ -1,0 +1,17 @@
+Check whether an outreach message is safe to send after human approval.
+
+Flag:
+- spam-like language
+- over-promotional tone
+- irrelevant content
+- false claims
+- duplicate messages
+- repeated contact to the same user
+- too many links
+- high-risk language
+
+Return strict JSON:
+{
+  "risk_level": "low | medium | high | blocked",
+  "notes": {}
+}

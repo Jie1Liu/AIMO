@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aimo-backend-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aimo
+      POSTGRES_PASSWORD: aimo
+      POSTGRES_DB: aimo
+    ports:
+      - "5432:5432"
+    volumes:
+      - aimo_backend_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aimo -d aimo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: aimo-backend-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://aimo:aimo@postgres:5432/aimo
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      AWS_REGION: us-east-1
+      SECRETS_MANAGER_PREFIX: aimo/
+      BLUESKY_SERVICE_URL: https://bsky.social
+    ports:
+      - "8000:8000"
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  aimo_backend_postgres:
