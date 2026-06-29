@@ -18,6 +18,7 @@ from app.schemas.product import (
     SearchStrategyRead,
 )
 from app.schemas.search import SearchJobRead
+from app.services.lead_ranking_service import LeadRankingService
 from app.services.product_profile_service import ProductProfileService
 from app.services.search_orchestrator import SearchOrchestrator
 from app.services.search_strategy_service import SearchStrategyService
@@ -113,6 +114,8 @@ def run_search(
         strategy_ids=payload.strategy_ids,
         process_now=payload.process_now,
     )
+    if payload.process_now:
+        LeadRankingService().rerank_product(db, product)
     db.commit()
     return jobs
 
