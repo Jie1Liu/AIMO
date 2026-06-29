@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 from typing import Optional
 from datetime import datetime, timezone
 
@@ -12,8 +13,69 @@ from app.services.scoring_service import ScoringService
 
 
 class LeadFinderService:
-    pain_terms = {"struggle", "struggling", "problem", "breaks", "need", "hard", "help", "pain"}
-    buying_terms = {"looking for", "alternative", "tool", "solve", "using", "comparison"}
+    pain_terms = {
+        "can't",
+        "cannot",
+        "difficult",
+        "frustrated",
+        "hard",
+        "help",
+        "need",
+        "pain",
+        "problem",
+        "stuck",
+        "struggle",
+        "struggling",
+        "wish",
+    }
+    buying_terms = {
+        "alternative",
+        "any tool",
+        "how can",
+        "how do",
+        "looking for",
+        "need a",
+        "recommend",
+        "seeking",
+        "suggestions",
+        "what do you use",
+    }
+    stop_words = {
+        "and",
+        "about",
+        "after",
+        "are",
+        "around",
+        "before",
+        "building",
+        "conversations",
+        "find",
+        "for",
+        "from",
+        "has",
+        "have",
+        "help",
+        "into",
+        "join",
+        "looking",
+        "need",
+        "new",
+        "our",
+        "product",
+        "relevant",
+        "right",
+        "small",
+        "struggle",
+        "that",
+        "the",
+        "their",
+        "this",
+        "was",
+        "were",
+        "with",
+        "you",
+        "your",
+    }
 
     def __init__(self) -> None:
         self.scoring = ScoringService()
@@ -30,11 +92,29 @@ class LeadFinderService:
 
         keyword_hits = [word for word in product.keywords or [] if word.lower() in text]
         competitor_hits = [word for word in product.competitors or [] if word.lower() in text]
-        relevance = min(1.0, 0.45 + 0.18 * len(keyword_hits) + 0.12 * len(competitor_hits))
-        pain_intensity = 0.8 if any(term in text for term in self.pain_terms) else 0.45
-        buying_intent = 0.85 if any(term in text for term in self.buying_terms) else 0.35
-        target_fit = 0.8 if product.target_audience and any(part.strip().lower() in text for part in product.target_audience.split(",")) else 0.55
-        engagement = min(1.0, max(0.0, item.engagement_score / 100))
+        signal_tokens = self._tokens(
+            " ".join([*(product.keywords or []), product.main_problem or ""])
+        )
+        audience_tokens = self._tokens(product.target_audience or "")
+        text_tokens = self._tokens(text, remove_stop_words=False)
+        signal_hits = sorted(signal_tokens & text_tokens)
+        audience_hits = sorted(audience_tokens & text_tokens)
+        pain_hits = sorted(term for term in self.pain_terms if term in text)
+        buying_hits = sorted(term for term in self.buying_terms if term in text)
+        has_question = "?" in text or "how " in text
+        first_person = bool(re.search(r"\b(i|i'm|im|my|we|we're|our)\b", text))
+
+        relevance = min(
+            1.0,
+            0.50
+            + 0.22 * len(keyword_hits)
+            + 0.07 * min(4, len(signal_hits))
+            + 0.08 * len(competitor_hits),
+        )
+        pain_intensity = 0.88 if pain_hits else 0.58 if has_question or first_person else 0.38
+        buying_intent = 0.92 if buying_hits else 0.68 if has_question and first_person else 0.42
+        target_fit = min(1.0, 0.52 + 0.10 * min(4, len(audience_hits)))
+        engagement = min(1.0, max(0.0, item.engagement_score / 20))
         recency = self._recency_score(item)
 
         score = self.scoring.calculate_score(
@@ -49,6 +129,15 @@ class LeadFinderService:
             return None
 
         intent_type = self._intent_type(text, competitor_hits)
+        reason = self._reason(
+            item.platform,
+            keyword_hits=keyword_hits,
+            signal_hits=signal_hits,
+            audience_hits=audience_hits,
+            pain_hits=pain_hits,
+            buying_hits=buying_hits,
+            has_question=has_question,
+        )
         lead = Lead(
             product_id=product.id,
             social_item_id=item.id,
@@ -61,7 +150,7 @@ class LeadFinderService:
             pain_point=self._pain_point(product, item),
             user_need=f"Needs a practical way to address: {product.main_problem or product.growth_goal or product.product_name}",
             matched_product_value=product.solution or product.one_liner or product.product_description,
-            reason=f"Matched {intent_type} signal from public {item.platform} content.",
+            reason=reason,
         )
         db.add(lead)
         db.flush()
@@ -80,6 +169,53 @@ class LeadFinderService:
         if product.main_problem:
             return product.main_problem
         return item.content_text[:180]
+
+    def _tokens(self, value: str, *, remove_stop_words: bool = True) -> set[str]:
+        tokens = {
+            self._stem(token)
+            for token in re.findall(r"[a-z0-9]+", value.lower().replace("-", " "))
+            if len(token) >= 3
+        }
+        if remove_stop_words:
+            return {token for token in tokens if token not in self.stop_words}
+        return tokens
+
+    def _stem(self, value: str) -> str:
+        if value.endswith("ies") and len(value) > 5:
+            return f"{value[:-3]}y"
+        if value.endswith("s") and len(value) > 4:
+            return value[:-1]
+        return value
+
+    def _reason(
+        self,
+        platform: str,
+        *,
+        keyword_hits: list[str],
+        signal_hits: list[str],
+        audience_hits: list[str],
+        pain_hits: list[str],
+        buying_hits: list[str],
+        has_question: bool,
+    ) -> str:
+        phrase_tokens = self._tokens(" ".join(keyword_hits), remove_stop_words=False)
+        token_evidence = [
+            token
+            for token in [*signal_hits, *audience_hits]
+            if token not in phrase_tokens and token not in self.stop_words
+        ]
+        matched = list(dict.fromkeys([*keyword_hits, *token_evidence]))[:4]
+        evidence: list[str] = []
+        if matched:
+            evidence.append(f"matched {', '.join(matched)}")
+        if buying_hits:
+            evidence.append("shows active solution intent")
+        elif pain_hits:
+            evidence.append("describes a relevant pain point")
+        elif has_question:
+            evidence.append("asks for practical guidance")
+        evidence_text = " and ".join(evidence) or "matches the product context"
+        return f"Public {platform} post {evidence_text}."
 
     def _recency_score(self, item: SocialItem) -> float:
         if not item.published_at:

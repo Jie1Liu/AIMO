@@ -2,12 +2,14 @@
 
 import {
   ArrowRight,
+  BarChart3,
   Bot,
   Check,
   CheckCircle2,
   ChevronDown,
   ExternalLink,
   Eye,
+  ListChecks,
   LoaderCircle,
   MessageCircle,
   MessageSquareText,
@@ -19,6 +21,8 @@ import {
   ShieldCheck,
   SkipForward,
   Sparkles,
+  Target,
+  TrendingUp,
   Users
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -131,6 +135,26 @@ function formatIntent(value: string) {
   return value.replaceAll("_", " ");
 }
 
+function avatarUrl(lead: LeadRead) {
+  const value = lead.social_item?.raw_json.avatar_url;
+  return typeof value === "string" && value ? value : null;
+}
+
+function LeadAvatar({ lead, className = "" }: { lead: LeadRead; className?: string }) {
+  const url = avatarUrl(lead);
+  const initial = (lead.author_name ?? "?").slice(0, 1).toUpperCase();
+  return (
+    <div className={`avatar ${className}`.trim()}>
+      <span>{initial}</span>
+      {url && <img src={url} alt={`@${lead.author_name ?? "Bluesky user"}`} />}
+    </div>
+  );
+}
+
+function displayedMatch(item: ReviewItem) {
+  return item.localStatus === "sent" ? 100 : item.lead.lead_score;
+}
+
 export default function HomePage() {
   const [apiUrl] = useState(() => {
     const configured = process.env.NEXT_PUBLIC_API_URL;
@@ -152,6 +176,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [platformMenuOpen, setPlatformMenuOpen] = useState(false);
+  const [mainView, setMainView] = useState<"review" | "results">("review");
 
   const selected = useMemo(
     () => queue.find((item) => item.message.id === selectedId) ?? null,
@@ -159,6 +184,9 @@ export default function HomePage() {
   );
   const sentCount = queue.filter((item) => item.localStatus === "sent").length;
   const readyCount = queue.filter((item) => item.localStatus === "ready").length;
+  const averageMatch = queue.length
+    ? Math.round(queue.reduce((total, item) => total + displayedMatch(item), 0) / queue.length)
+    : 0;
 
   useEffect(() => {
     void loadPlatformStatus();
@@ -209,6 +237,7 @@ export default function HomePage() {
     setNotice(null);
     setQueue([]);
     setSelectedId(null);
+    setMainView("review");
     try {
       setStage("Saving product brief");
       const created = await request<ProductRead>("/api/products", {
@@ -342,7 +371,11 @@ export default function HomePage() {
   async function approveAndSend() {
     if (!selected) return;
     if (!platform?.connected) {
-      setError("Add BLUESKY_HANDLE and BLUESKY_APP_PASSWORD to the backend before sending.");
+      setNotice(null);
+      setError(
+        "Bluesky sending is not connected yet. Create a Bluesky App Password, then add BLUESKY_HANDLE and BLUESKY_APP_PASSWORD to Zeabur. Discovery and review already work."
+      );
+      setStage("Bluesky sending needs one-time setup");
       return;
     }
     setBusy("send");
@@ -505,6 +538,29 @@ export default function HomePage() {
           <p>{stage}</p>
         </div>
 
+        {queue.length > 0 && (
+          <div className="view-switcher" role="tablist" aria-label="Workspace view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mainView === "review"}
+              className={mainView === "review" ? "active" : ""}
+              onClick={() => setMainView("review")}
+            >
+              <ListChecks size={15} /> Review queue
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mainView === "results"}
+              className={mainView === "results" ? "active" : ""}
+              onClick={() => setMainView("results")}
+            >
+              <BarChart3 size={15} /> Results
+            </button>
+          </div>
+        )}
+
         {error && <div className="alert error-alert">{error}</div>}
         {notice && <div className="alert success-alert">{notice}</div>}
         {!platform?.configured && (
@@ -535,6 +591,88 @@ export default function HomePage() {
               <span><ShieldCheck size={16} /> You approve every send</span>
             </div>
           </section>
+        ) : mainView === "results" ? (
+          <section className="results-dashboard">
+            <header className="results-hero">
+              <div>
+                <p className="eyebrow">Audience performance</p>
+                <h2>From discovered users to confirmed conversations.</h2>
+                <p>
+                  Review the people AIMO found, see which replies were sent, and track
+                  confirmed matches in one place.
+                </p>
+              </div>
+              <span>{sentCount ? `${sentCount} confirmed` : "Awaiting first send"}</span>
+            </header>
+
+            <div className="metric-grid">
+              <article>
+                <Users size={18} />
+                <span>Users found</span>
+                <strong>{queue.length}</strong>
+                <small>Live Bluesky matches</small>
+              </article>
+              <article>
+                <Send size={18} />
+                <span>Replies sent</span>
+                <strong>{sentCount}</strong>
+                <small>Human-approved only</small>
+              </article>
+              <article>
+                <Target size={18} />
+                <span>Confirmed fit</span>
+                <strong>{sentCount ? "100%" : "—"}</strong>
+                <small>Sent replies count as confirmed</small>
+              </article>
+              <article>
+                <TrendingUp size={18} />
+                <span>Average match</span>
+                <strong>{averageMatch}%</strong>
+                <small>Across this review queue</small>
+              </article>
+            </div>
+
+            <div className="results-table">
+              <div className="results-table-header">
+                <div>
+                  <p className="eyebrow">Audience pipeline</p>
+                  <h3>Current users and reply outcomes</h3>
+                </div>
+                <span>Live session</span>
+              </div>
+              <div className="results-list">
+                {queue.map((item) => (
+                  <button
+                    type="button"
+                    key={item.message.id}
+                    className="result-row"
+                    onClick={() => {
+                      setSelectedId(item.message.id);
+                      setMainView("review");
+                    }}
+                  >
+                    <LeadAvatar lead={item.lead} className="result-avatar" />
+                    <div className="result-person">
+                      <strong>@{item.lead.author_name ?? "unknown"}</strong>
+                      <span>{formatIntent(item.lead.intent_type)}</span>
+                    </div>
+                    <p>{excerpt(item.lead.social_item?.content_text ?? "", 110)}</p>
+                    <span className={`result-match ${item.localStatus === "sent" ? "confirmed" : ""}`}>
+                      {displayedMatch(item)}%
+                    </span>
+                    <span className={`result-status ${item.localStatus}`}>
+                      {item.localStatus === "sent"
+                        ? "Reply sent"
+                        : item.localStatus === "skipped"
+                          ? "Skipped"
+                          : "Ready to review"}
+                    </span>
+                    <ArrowRight size={15} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
         ) : (
           <div className="review-layout">
             <section className="queue-panel">
@@ -552,11 +690,11 @@ export default function HomePage() {
                     className={`queue-item ${selectedId === item.message.id ? "selected" : ""} ${item.localStatus}`}
                     onClick={() => setSelectedId(item.message.id)}
                   >
-                    <div className="avatar">{(item.lead.author_name ?? "?").slice(0, 1).toUpperCase()}</div>
+                    <LeadAvatar lead={item.lead} />
                     <div className="queue-copy">
                       <div>
                         <strong>@{item.lead.author_name ?? "unknown"}</strong>
-                        <span>{item.lead.lead_score}% match</span>
+                        <span>{displayedMatch(item)}% match</span>
                       </div>
                       <p>{excerpt(item.lead.social_item?.content_text ?? "")}</p>
                       <small>{formatIntent(item.lead.intent_type)} · #{index + 1}</small>
@@ -571,11 +709,14 @@ export default function HomePage() {
             {selected && (
               <section className="review-panel">
                 <div className="review-topline">
-                  <div>
-                    <p className="eyebrow">Original conversation</p>
-                    <strong>@{selected.lead.author_name ?? "unknown"}</strong>
+                  <div className="review-person">
+                    <LeadAvatar lead={selected.lead} className="review-avatar" />
+                    <div>
+                      <p className="eyebrow">Original conversation</p>
+                      <strong>@{selected.lead.author_name ?? "unknown"}</strong>
+                    </div>
                   </div>
-                  <div className="score-ring">{selected.lead.lead_score}<small>%</small></div>
+                  <div className="score-ring">{displayedMatch(selected)}<small>%</small></div>
                 </div>
 
                 <div className="original-post">
@@ -637,9 +778,13 @@ export default function HomePage() {
                       className="send-button"
                       disabled={
                         Boolean(busy) ||
-                        !platform?.connected ||
                         !selected.reply.trim() ||
                         ["high", "blocked"].includes(selected.message.risk_level)
+                      }
+                      title={
+                        platform?.connected
+                          ? "Approve and publish this reviewed reply on Bluesky"
+                          : "Click to see the one-time Bluesky connection setup"
                       }
                       onClick={approveAndSend}
                     >
@@ -649,7 +794,10 @@ export default function HomePage() {
                   )}
                 </div>
                 {!platform?.connected && (
-                  <p className="send-hint">Connect your Bluesky App Password to enable sending.</p>
+                  <p className="send-hint">
+                    Sending needs a one-time Bluesky App Password connection. Click the button
+                    for the exact setup requirement.
+                  </p>
                 )}
               </section>
             )}

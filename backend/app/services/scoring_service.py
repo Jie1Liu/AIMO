@@ -12,11 +12,11 @@ class ScoringService:
         recency_score: float,
     ) -> int:
         score = (
-            product_relevance * 30
-            + pain_intensity * 20
+            product_relevance * 40
+            + pain_intensity * 15
             + buying_intent * 20
             + target_user_fit * 15
-            + engagement_score * 10
+            + engagement_score * 5
             + recency_score * 5
         )
         return max(0, min(100, round(score)))

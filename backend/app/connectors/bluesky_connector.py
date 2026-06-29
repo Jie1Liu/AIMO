@@ -142,5 +142,7 @@ class BlueskyConnector(BaseConnector):
                 "root_uri": root_ref.get("uri") or uri,
                 "root_cid": root_ref.get("cid") or post.get("cid"),
                 "author_handle": handle,
+                "author_display_name": author.get("displayName"),
+                "avatar_url": author.get("avatar"),
             },
         )
