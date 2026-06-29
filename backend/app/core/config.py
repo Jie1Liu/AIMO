@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     llm_base_url: str = Field(default="https://api.openai.com/v1", alias="LLM_BASE_URL")
     llm_model: str = Field(default="gpt-5.5", alias="LLM_MODEL")
     llm_api_style: str = Field(default="chat_completions", alias="LLM_API_STYLE")
+    llm_enable_thinking: Optional[bool] = Field(default=None, alias="LLM_ENABLE_THINKING")
+    llm_timeout_seconds: float = Field(default=60, alias="LLM_TIMEOUT_SECONDS")
     reddit_client_id: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_ID")
     reddit_client_secret: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_SECRET")
     youtube_client_id: Optional[str] = Field(default=None, alias="YOUTUBE_CLIENT_ID")

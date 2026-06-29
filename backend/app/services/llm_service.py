@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, Optional
 
 import httpx
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LLMService:
@@ -55,8 +58,8 @@ class LLMService:
             draft = self._extract_draft(text)
             if draft:
                 return draft, settings.llm_model
-        except (httpx.HTTPError, ValueError, KeyError, TypeError, json.JSONDecodeError):
-            pass
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            logger.warning("LLM generation fell back to the context template (%s).", type(exc).__name__)
         return None, "template"
 
     def _chat_completions_request(self, instructions: str, payload: dict[str, Any], api_key: str) -> str:
@@ -70,8 +73,10 @@ class LLMService:
             ],
             "response_format": {"type": "json_object"},
         }
+        if settings.llm_enable_thinking is not None:
+            body["enable_thinking"] = settings.llm_enable_thinking
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        with httpx.Client(timeout=25) as client:
+        with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
             response = client.post(url, headers=headers, json=body)
             if response.status_code == 400:
                 body.pop("response_format", None)
@@ -88,7 +93,7 @@ class LLMService:
             "input": json.dumps(payload, ensure_ascii=False),
         }
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        with httpx.Client(timeout=25) as client:
+        with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
             response = client.post(url, headers=headers, json=body)
             response.raise_for_status()
             data = response.json()

@@ -89,12 +89,16 @@ Qwen through Alibaba Cloud Model Studio:
 LLM_API_STYLE=chat_completions
 LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 LLM_API_KEY=your-dashscope-key
-LLM_MODEL=qwen-plus
+LLM_MODEL=qwen3.7-plus
+LLM_ENABLE_THINKING=false
+LLM_TIMEOUT_SECONDS=60
 ```
 
 For another compatible provider, use its OpenAI-compatible base URL, API key, and
 model ID. `LLM_API_STYLE=chat_completions` works with most providers; use `responses`
-only for endpoints that implement OpenAI's Responses API.
+only for endpoints that implement OpenAI's Responses API. `LLM_ENABLE_THINKING=false`
+keeps short social replies fast and economical; omit it when the provider does not
+support that parameter.
 
 If no model key is configured, the review flow uses a safe contextual template.
 
